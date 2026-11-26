@@ -171,6 +171,12 @@ function upd_backup(): string
         $zip->addFile($f->getPathname(), $rel);
     }
     $zip->close();
+
+    // 只保留最近 10 份，避免长期占用磁盘
+    $olds = glob($dir . '/code_*.zip') ?: [];
+    usort($olds, fn($a, $b) => filemtime($b) <=> filemtime($a));
+    foreach (array_slice($olds, 10) as $old) @unlink($old);
+
     return is_file($file) ? $file : '';
 }
 
