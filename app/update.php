@@ -246,7 +246,12 @@ function upd_apply(): array
             'version' => $ver,
             'time'    => date('Y-m-d H:i:s'),
         ], JSON_UNESCAPED_UNICODE));
-        @unlink(DATA_DIR . '/update_check.json');
+        // 保留检查结果，页面直接显示“已是最新”
+        if (!empty($info['ok'])) {
+            @file_put_contents(DATA_DIR . '/update_check.json', json_encode($info, JSON_UNESCAPED_UNICODE));
+        } else {
+            @unlink(DATA_DIR . '/update_check.json');
+        }
         if (function_exists('opcache_reset')) @opcache_reset();
 
         return [
