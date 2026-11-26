@@ -7,6 +7,7 @@ require __DIR__ . '/../app/alipay.php';
 require __DIR__ . '/../app/wechat.php';
 require __DIR__ . '/../app/mailer.php';
 require __DIR__ . '/../app/notify.php';
+require __DIR__ . '/../app/update.php';
 
 if (!is_installed()) { header('Location: /install.php'); exit; }
 
@@ -1449,6 +1450,28 @@ elseif ($path === '/admin/settings') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_check();
         $act = (string)($_POST['act'] ?? 'save');
+
+        // 系统更新
+        if ($act === 'check_update') {
+            $info = upd_check(true);
+            if (!empty($info['ok'])) {
+                $st  = upd_state();
+                $new = upd_has_new($st, $info);
+                flash('GitHub 最新版本 v' . $info['version']
+                    . ($info['sha'] !== '' ? '（' . substr($info['sha'], 0, 7) . '）' : '')
+                    . ($new ? '，发现更新' : '，当前已是最新'), 'ok');
+            } else {
+                flash((string)($info['msg'] ?? '检查失败'), 'err');
+            }
+            redirect('/admin/settings');
+        }
+        if ($act === 'do_update') {
+            $r = upd_apply();
+            flash($r['ok']
+                ? '已更新到 v' . $r['version'] . '，写入 ' . $r['files'] . ' 个文件；原代码已备份为 ' . basename($r['backup'])
+                : '更新失败：' . $r['msg'], $r['ok'] ? 'ok' : 'err');
+            redirect('/admin/settings');
+        }
         foreach (['site_name','site_url','contact','epay_url','epay_pid','epay_key',
                   'smtp_host','smtp_port','smtp_user','smtp_from','smtp_from_name','smtp_secure'] as $k) {
             if (array_key_exists($k, $_POST)) set_setting($k, trim((string)$_POST[$k]));
@@ -1682,6 +1705,38 @@ elseif ($path === '/admin/settings') {
         echo '</div></details>';
 
         echo '<button class="btn wide" style="margin-top:16px">保存设置</button></form>';
+
+        $ust  = upd_state();
+        $uchk = upd_cached();
+        $uNew = $uchk ? upd_has_new($ust, $uchk) : false;
+        echo '<div class="panel" style="margin-top:16px">';
+        echo '<h3>系统更新</h3>';
+        echo '<p class="muted small" style="margin:0 0 10px">当前版本 v' . e($ust['version'])
+            . ($ust['sha'] !== '' ? ' · ' . e(substr($ust['sha'], 0, 7)) : '')
+            . ($ust['time'] !== '' ? ' · 更新于 ' . e($ust['time']) : '') . '</p>';
+        if ($uchk) {
+            echo '<p class="small" style="margin:0 0 8px">GitHub 最新：<b>v' . e($uchk['version']) . '</b>'
+                . ($uchk['sha'] !== '' ? ' · ' . e(substr($uchk['sha'], 0, 7)) : '')
+                . ($uchk['date'] !== '' ? ' · ' . e(substr(str_replace('T', ' ', (string)$uchk['date']), 0, 16)) : '') . '</p>';
+            if (!empty($uchk['note'])) {
+                echo '<p class="muted small" style="margin:0 0 8px">' . e((string)$uchk['note']) . '</p>';
+            }
+            echo '<p class="small" style="margin:0 0 10px;color:' . ($uNew ? '#7fbf95' : '#9fb0a6') . '">'
+                . ($uNew ? '发现新版本，可以更新' : '当前已是最新版本') . '</p>';
+        } else {
+            echo '<p class="muted small" style="margin:0 0 10px">还没有检查过，点下面的按钮获取 GitHub 最新版本。</p>';
+        }
+        echo '<div class="actions" style="margin:0">';
+        echo '<form method="post" style="margin:0"><input type="hidden" name="act" value="check_update">'
+            . csrf_field() . '<button class="btn ghost">检查更新</button></form>';
+        if ($uNew) {
+            echo '<form method="post" style="margin:0" data-confirm="将从 GitHub 拉取最新代码，更新前会自动备份当前代码。站点配置和数据库不受影响，确定继续？">'
+                . '<input type="hidden" name="act" value="do_update">' . csrf_field()
+                . '<button class="btn">立即更新到最新版</button></form>';
+        }
+        echo '</div>';
+        echo '<p class="muted small" style="margin:12px 0 0">更新只覆盖程序代码，不会动 <code>app/config.php</code>、数据库和已上传文件；更新前的代码备份在 <code>data/backups/</code>。</p>';
+        echo '</div>';
 
         echo '<div class="panel" style="margin-top:16px">';
         echo '<h3>账号</h3>';
