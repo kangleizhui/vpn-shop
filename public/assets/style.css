@@ -108,10 +108,22 @@ main.wrap{padding-top:26px;padding-bottom:56px;min-height:calc(100vh - 200px)}
 }
 
 /* ---------- 地区 ---------- */
-.regions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin:28px 0 8px}
+.regions{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,190px));
+  gap:8px;justify-content:center;margin:28px 0 10px;
+}
+.regions .rlabel{grid-column:1/-1;text-align:center;margin-bottom:2px}
 .region-chip{
+  display:block;text-align:center;line-height:18px;
   background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:999px;
-  padding:6px 15px;font-size:13px;color:#fff;
+  padding:8px 12px;font-size:13px;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;
+}
+@media(max-width:600px){
+  .regions{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .region-chip{font-size:12.5px;padding:8px 8px}
+  /* 节点数为奇数时，最后一个占满整行，避免最后一行空半格 */
+  .region-chip:last-child:nth-child(even){grid-column:span 2}
 }
 
 /* ---------- 卡片 / 套餐 ---------- */

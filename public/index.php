@@ -97,7 +97,7 @@ if ($path === '/') {
         if (!shop_ready()) {
             echo '<div class="alert warn">暂无可用节点，请稍后再来。</div>';
         } else {
-            echo '<section class="regions"><span class="muted small">可选地区：</span>';
+            echo '<section class="regions"><span class="rlabel muted small">可选地区</span>';
             foreach ($servers as $s) {
                 echo '<span class="region-chip">🌍 ' . e(server_region($s)) . ($s['city'] !== '' ? ' · ' . e($s['city']) : '') . '</span>';
             }
