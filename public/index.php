@@ -8,6 +8,7 @@ require __DIR__ . '/../app/wechat.php';
 require __DIR__ . '/../app/mailer.php';
 require __DIR__ . '/../app/notify.php';
 require __DIR__ . '/../app/update.php';
+require __DIR__ . '/../app/theme.php';
 
 if (!is_installed()) { header('Location: /install.php'); exit; }
 
@@ -20,7 +21,9 @@ function page_head(string $title): void {
     echo '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . e($title) . ' - ' . e($site) . '</title>';
-    echo '<link rel="stylesheet" href="/assets/style.css?v=' . (@filemtime(__DIR__ . '/assets/style.css') ?: '1') . '"></head><body>';
+    echo '<link rel="stylesheet" href="/assets/style.css?v=' . (@filemtime(__DIR__ . '/assets/style.css') ?: '1') . '">';
+    echo theme_css();
+    echo '</head><body>';
 }
 function nav(): void {
     $site = cfg('site_name', '云商城');
@@ -1549,18 +1552,94 @@ elseif ($path === '/admin/settings') {
             flash(($r['ok'] ? '测试邮件已发送：' : '发送失败：') . $r['msg'], $r['ok'] ? 'ok' : 'err');
             redirect('/admin/settings');
         }
-        flash('设置已保存');
+        // 外观：主题色 / 玻璃透明度 / 背景图
+        if (array_key_exists('theme_primary', $_POST)) {
+            $tp = trim((string)$_POST['theme_primary']);
+            $ta = trim((string)($_POST['theme_accent'] ?? ''));
+            if (!th_valid_hex($tp)) $tp = '#2f6b45';
+            if (!th_valid_hex($ta)) $ta = th_lighten($tp, 0.50);
+            set_setting('theme_primary', $tp);
+            set_setting('theme_accent', $ta);
+        }
+        if (array_key_exists('glass_alpha', $_POST)) {
+            set_setting('glass_alpha', (string)max(20, min(95, (int)$_POST['glass_alpha'])));
+        }
+        $updir = APP_ROOT . '/public/uploads';
+        if (!is_dir($updir)) @mkdir($updir, 0755, true);
+        $upErr = '';
+        foreach (['bg_pc', 'bg_mobile'] as $bk) {
+            if (!empty($_POST['reset_' . $bk])) {
+                $old = (string)setting($bk, '');
+                if ($old !== '' && th_valid_bg($old) && is_file(APP_ROOT . '/public' . $old)) @unlink(APP_ROOT . '/public' . $old);
+                set_setting($bk, '');
+            }
+            $uf = $_FILES[$bk] ?? null;
+            if (!$uf || ($uf['error'] ?? 1) !== UPLOAD_ERR_OK || !is_uploaded_file((string)$uf['tmp_name'])) continue;
+            if ((int)$uf['size'] > 8 * 1024 * 1024) { $upErr = '背景图不能超过 8MB'; continue; }
+            $info = @getimagesize((string)$uf['tmp_name']);
+            $map = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+            if (!$info || !isset($map[$info[2]])) { $upErr = '背景图只支持 JPG / PNG / WebP'; continue; }
+            if ($info[0] < 600 || $info[1] < 400) { $upErr = '背景图尺寸太小，至少 600×400'; continue; }
+            $name = $bk . '_' . date('YmdHis') . '.' . $map[$info[2]];
+            if (@move_uploaded_file((string)$uf['tmp_name'], $updir . '/' . $name)) {
+                $old = (string)setting($bk, '');
+                if ($old !== '' && th_valid_bg($old) && is_file(APP_ROOT . '/public' . $old)) @unlink(APP_ROOT . '/public' . $old);
+                set_setting($bk, '/uploads/' . $name);
+            } else {
+                $upErr = '保存背景图失败，请检查 public/uploads 目录权限';
+            }
+        }
+
+        flash($upErr !== '' ? $upErr : '设置已保存', $upErr !== '' ? 'err' : 'ok');
         redirect('/admin/settings');
     }
     page('系统设置', function () {
         $chs = pay_channels();
         echo '<h2>系统设置</h2>';
-        echo '<form method="post">' . csrf_field() . '<input type="hidden" name="settings_form" value="1">';
+        echo '<form method="post" enctype="multipart/form-data">' . csrf_field() . '<input type="hidden" name="settings_form" value="1">';
 
         echo '<details class="fold" open><summary>站点设置</summary><div class="foldbody">';
         echo '<label>站点名称<input type="text" name="site_name" value="' . e(cfg('site_name', '云商城')) . '"></label>';
         echo '<label>站点地址（支付回调需要）<input type="text" name="site_url" value="' . e(cfg('site_url')) . '" placeholder="https://你的域名"></label>';
         echo '<label>客服联系方式<input type="text" name="contact" value="' . e(cfg('contact')) . '"></label>';
+        echo '</div></details>';
+
+        $tp   = theme_params();
+        $bgPc = (string)setting('bg_pc', '');
+        $bgM  = (string)setting('bg_mobile', '');
+        $al   = (int)round($tp['alpha'] * 100);
+        echo '<details class="fold"><summary>外观</summary><div class="foldbody">';
+
+        echo '<label>电脑端背景图</label>';
+        if ($bgPc !== '') echo '<div class="bgprev"><img src="' . e($bgPc) . '" alt="电脑端背景"></div>';
+        echo '<input type="file" name="bg_pc" accept="image/jpeg,image/png,image/webp">';
+        echo '<p class="muted small" style="margin:6px 0 0">建议 1920×1080 或更大，JPG/PNG/WebP，不超过 8MB。' . ($bgPc !== '' ? ' 当前已自定义。' : ' 当前使用默认背景。') . '</p>';
+        if ($bgPc !== '') echo '<label class="row" style="margin-top:8px"><input type="checkbox" name="reset_bg_pc" value="1"> 恢复默认背景</label>';
+
+        echo '<label style="margin-top:20px">手机端背景图</label>';
+        if ($bgM !== '') echo '<div class="bgprev"><img src="' . e($bgM) . '" alt="手机端背景"></div>';
+        echo '<input type="file" name="bg_mobile" accept="image/jpeg,image/png,image/webp">';
+        echo '<p class="muted small" style="margin:6px 0 0">建议 1080×1920 竖图，手机端单独使用。' . ($bgM !== '' ? ' 当前已自定义。' : ' 当前使用默认背景。') . '</p>';
+        if ($bgM !== '') echo '<label class="row" style="margin-top:8px"><input type="checkbox" name="reset_bg_mobile" value="1"> 恢复默认背景</label>';
+
+        echo '<label style="margin-top:22px">玻璃透明度 <output id="alphaOut" style="color:#fff">' . $al . '%</output></label>';
+        echo '<input type="range" id="alphaRange" name="glass_alpha" min="20" max="95" step="1" value="' . $al . '" style="width:100%;accent-color:var(--primary)">';
+        echo '<p class="muted small" style="margin:6px 0 0">数值越小越透（背景更明显），越大卡片越实。默认 55%。</p>';
+
+        echo '<label style="margin-top:22px">主题色</label>';
+        echo '<div class="swatches">';
+        foreach (THEME_PRESETS as $pk) {
+            [$pname, $pc1, $pc2] = $pk;
+            $on = strcasecmp($pc1, $tp['primary']) === 0 ? ' on' : '';
+            echo '<button type="button" class="sw' . $on . '" data-p="' . $pc1 . '" data-a="' . $pc2 . '">'
+                . '<i style="background:' . $pc1 . '"></i><span>' . e($pname) . '</span></button>';
+        }
+        echo '</div>';
+        echo '<label>自定义颜色</label>';
+        echo '<div class="colorrow"><input type="text" id="themeHex" name="theme_primary" value="' . e($tp['primary']) . '" maxlength="7" placeholder="#2f6b45" spellcheck="false">'
+            . '<input type="hidden" name="theme_accent" id="themeAccent" value="' . e($tp['accent']) . '">'
+            . '<span class="colorchip" id="colorChip" style="background:' . e($tp['primary']) . '"></span></div>';
+        echo '<p class="muted small" style="margin:6px 0 0">填 6 位十六进制色值，如 <code>#2f6b45</code>。按钮、边框、高亮会跟着变。</p>';
         echo '</div></details>';
 
         echo '<details class="fold"' . (setting('pay_channels') === '' ? ' open' : '') . '><summary>支付设置</summary><div class="foldbody">';
@@ -1705,6 +1784,29 @@ elseif ($path === '/admin/settings') {
         echo '</div></details>';
 
         echo '<button class="btn wide" style="margin-top:16px">保存设置</button></form>';
+
+        echo '<script>(function(){'
+            . 'var root=document.documentElement,hex=document.getElementById("themeHex"),acc=document.getElementById("themeAccent"),'
+            . 'rng=document.getElementById("alphaRange"),out=document.getElementById("alphaOut"),chip=document.getElementById("colorChip");'
+            . 'if(!hex||!rng)return;'
+            . 'function rgb(h){h=h.replace("#","");return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)];}'
+            . 'function hx(a){return "#"+a.map(function(v){v=Math.max(0,Math.min(255,Math.round(v)));return ("0"+v.toString(16)).slice(-2);}).join("");}'
+            . 'function mix(a,b,t){var x=rgb(a),y=rgb(b);return hx([x[0]+(y[0]-x[0])*t,x[1]+(y[1]-x[1])*t,x[2]+(y[2]-x[2])*t]);}'
+            . 'function rgbs(h,al){var c=rgb(h);return "rgba("+c[0]+","+c[1]+","+c[2]+","+al+")";}'
+            . 'function apply(p,a,al){var base=mix(p,"#0b1410",0.8);'
+            . 'root.style.setProperty("--primary",p);root.style.setProperty("--primary-hover",mix(p,"#ffffff",0.1));'
+            . 'root.style.setProperty("--accent",a);root.style.setProperty("--accent-soft",rgbs(a,0.18));'
+            . 'root.style.setProperty("--card",rgbs(base,al));root.style.setProperty("--card-hover",rgbs(base,Math.min(1,al+0.08)));'
+            . 'root.style.setProperty("--card-border",rgbs(a,0.18));root.style.setProperty("--field-border",rgbs(a,0.24));'
+            . 'root.style.setProperty("--line",rgbs(a,0.14));}'
+            . 'function mark(p){document.querySelectorAll(".sw").forEach(function(b){b.classList.toggle("on",b.dataset.p.toLowerCase()===p.toLowerCase());});}'
+            . 'function sync(){var v=hex.value.trim();if(!/^#[0-9a-fA-F]{6}$/.test(v))return;var a=mix(v,"#ffffff",0.5);acc.value=a;'
+            . 'chip.style.background=v;apply(v,a,rng.value/100);mark(v);}'
+            . 'hex.addEventListener("input",sync);'
+            . 'rng.addEventListener("input",function(){out.textContent=rng.value+"%";apply(hex.value,acc.value,rng.value/100);});'
+            . 'document.querySelectorAll(".sw").forEach(function(b){b.addEventListener("click",function(){hex.value=b.dataset.p;acc.value=b.dataset.a;'
+            . 'chip.style.background=b.dataset.p;apply(b.dataset.p,b.dataset.a,rng.value/100);mark(b.dataset.p);});});'
+            . '})();</script>';
 
         $ust  = upd_state();
         $uchk = upd_cached();
