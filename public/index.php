@@ -1454,6 +1454,20 @@ elseif ($path === '/admin/settings') {
         csrf_check();
         $act = (string)($_POST['act'] ?? 'save');
 
+        // 恢复默认外观
+        if ($act === 'reset_appearance') {
+            set_setting('theme_primary', '#2f6b45');
+            set_setting('theme_accent', '#7fbf95');
+            set_setting('glass_alpha', '55');
+            foreach (['bg_pc', 'bg_mobile'] as $bk) {
+                $old = (string)setting($bk, '');
+                if ($old !== '' && th_valid_bg($old) && is_file(APP_ROOT . '/public' . $old)) @unlink(APP_ROOT . '/public' . $old);
+                set_setting($bk, '');
+            }
+            flash('外观已恢复默认');
+            redirect('/admin/settings');
+        }
+
         // 系统更新
         if ($act === 'check_update') {
             $info = upd_check(true);
@@ -1640,6 +1654,7 @@ elseif ($path === '/admin/settings') {
             . '<input type="hidden" name="theme_accent" id="themeAccent" value="' . e($tp['accent']) . '">'
             . '<span class="colorchip" id="colorChip" style="background:' . e($tp['primary']) . '"></span></div>';
         echo '<p class="muted small" style="margin:6px 0 0">填 6 位十六进制色值，如 <code>#2f6b45</code>。按钮、边框、高亮会跟着变。</p>';
+        echo '<div style="margin-top:20px"><button type="submit" class="btn ghost" name="act" value="reset_appearance" data-confirm="恢复默认主题色、玻璃透明度和两张背景图？已上传的图片会被删除。">恢复默认外观</button></div>';
         echo '</div></details>';
 
         echo '<details class="fold"' . (setting('pay_channels') === '' ? ' open' : '') . '><summary>支付设置</summary><div class="foldbody">';

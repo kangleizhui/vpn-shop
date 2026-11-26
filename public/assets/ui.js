@@ -191,6 +191,25 @@
   }
   window.uiConfirm = uiConfirm;
 
+  // 按钮级确认：<button data-confirm="...">，确认后带上该按钮的 name/value 提交
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('button[data-confirm]') : null;
+    if (!b) return;
+    e.preventDefault();
+    uiConfirm(b.getAttribute('data-confirm'), function () {
+      var f = b.form;
+      if (!f) return;
+      if (b.name) {
+        var h = document.createElement('input');
+        h.type = 'hidden';
+        h.name = b.name;
+        h.value = b.value || '1';
+        f.appendChild(h);
+      }
+      f.submit();
+    });
+  }, true);
+
   document.addEventListener('submit', function (e) {
     var f = e.target;
     var q = f.getAttribute && f.getAttribute('data-confirm');
