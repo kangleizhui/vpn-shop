@@ -25,23 +25,41 @@ function page_head(string $title): void {
     echo theme_css();
     echo '</head><body>';
 }
+function nav_links(): array {
+    $j = json_decode((string)setting('nav_links', ''), true);
+    if (!is_array($j)) return [];
+    $out = [];
+    foreach ($j as $it) {
+        if (!is_array($it)) continue;
+        $t = trim((string)($it['title'] ?? ''));
+        $u = trim((string)($it['url'] ?? ''));
+        if ($t === '' || $u === '') continue;
+        if (!preg_match('#^(https?://|/)#i', $u)) continue;
+        $out[] = ['title' => $t, 'url' => $u];
+    }
+    return $out;
+}
+function drawer_script(): void {
+    echo '<script>(function(){var b=document.getElementById("menubtn"),d=document.getElementById("drawer"),m=document.getElementById("menumask");'
+       . 'if(!b||!d)return;function tog(v){var on=(v===undefined)?!d.classList.contains("on"):v;d.classList.toggle("on",on);m.classList.toggle("on",on);b.setAttribute("aria-expanded",on?"true":"false");document.body.style.overflow=on?"hidden":"";}'
+       . 'b.addEventListener("click",function(){tog();});m.addEventListener("click",function(){tog(false);});'
+       . 'd.querySelectorAll("a").forEach(function(a){a.addEventListener("click",function(){tog(false);});});'
+       . 'document.addEventListener("keydown",function(e){if(e.key==="Escape")tog(false);});})();</script>';
+}
 function nav(): void {
     $site = cfg('site_name', '云商城');
     $reqPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
     $adminPage = is_admin() && str_starts_with($reqPath, '/admin');
 
     echo '<header class="nav"><div class="wrap">';
-    if ($adminPage) {
-        echo '<button class="menubtn" id="menubtn" aria-label="菜单" aria-expanded="false"><i></i><i></i><i></i></button>';
-    }
+    echo '<button class="menubtn" id="menubtn" aria-label="菜单" aria-expanded="false"><i></i><i></i><i></i></button>';
     echo '<a class="brand" href="/"><span class="logo">⚡</span>' . e($site) . '</a>';
-    // 导航只显示一个：在当前页就不重复显示当前页入口
     if ($adminPage) {
         echo '<nav><a href="/">返回首页</a></nav>';
     } elseif ($reqPath === '/query') {
-        echo '<nav><a href="/">套餐</a><a href="/admin">管理</a></nav>';
+        echo '<nav><a href="/">套餐</a></nav>';
     } else {
-        echo '<nav><a href="/query">我的订阅</a><a href="/admin">管理</a></nav>';
+        echo '<nav><a href="/query">我的订阅</a></nav>';
     }
     echo '</div></header>';
 
@@ -61,12 +79,23 @@ function nav(): void {
             echo '<a' . $cls . ' href="' . e($it[1]) . '">' . e($it[0]) . '</a>';
         }
         echo '<div class="drawerhr"></div><a href="/">前台首页</a><a href="/admin/logout">退出登录</a></aside>';
-        echo '<script>(function(){var b=document.getElementById("menubtn"),d=document.getElementById("drawer"),m=document.getElementById("menumask");'
-           . 'if(!b||!d)return;function tog(v){var on=(v===undefined)?!d.classList.contains("on"):v;d.classList.toggle("on",on);m.classList.toggle("on",on);b.setAttribute("aria-expanded",on?"true":"false");document.body.style.overflow=on?"hidden":"";}'
-           . 'b.addEventListener("click",function(){tog();});m.addEventListener("click",function(){tog(false);});'
-           . 'd.querySelectorAll("a").forEach(function(a){a.addEventListener("click",function(){tog(false);});});'
-           . 'document.addEventListener("keydown",function(e){if(e.key==="Escape")tog(false);});})();</script>';
+    } else {
+        echo '<div class="mask" id="menumask"></div>';
+        echo '<aside class="drawer" id="drawer"><div class="drawerhd">菜单</div>';
+        echo '<a href="/">首页</a>';
+        echo '<a href="/query">我的订阅</a>';
+        echo '<a href="/admin">管理后台</a>';
+        $links = nav_links();
+        if ($links) {
+            echo '<div class="drawerhr"></div>';
+            foreach ($links as $l) {
+                $ext = (bool)preg_match('#^https?://#i', $l['url']);
+                echo '<a href="' . e($l['url']) . '"' . ($ext ? ' target="_blank" rel="noopener noreferrer"' : '') . '>' . e($l['title']) . '</a>';
+            }
+        }
+        echo '</aside>';
     }
+    drawer_script();
 }
 function page_foot(): void {
     echo '<footer class="foot"><div class="wrap"><p>© ' . date('Y') . ' ' . e(cfg('site_name', '云商城'));
@@ -1529,6 +1558,20 @@ elseif ($path === '/admin/settings') {
             if (in_array('epay', $chs, true)) { $chs[] = 'epay_alipay'; $chs[] = 'epay_wxpay'; }
             $chs = array_values(array_unique($chs));
             set_setting('pay_channels', implode(',', $chs));
+
+            // 首页抽屉自定义菜单
+            $nt = (array)($_POST['nav_title'] ?? []);
+            $nu = (array)($_POST['nav_url'] ?? []);
+            $nl = [];
+            foreach ($nt as $i => $t) {
+                $t = trim((string)$t);
+                $u = trim((string)($nu[$i] ?? ''));
+                if ($t === '' || $u === '') continue;
+                if (!preg_match('#^(https?://|/)#i', $u)) continue;
+                $nl[] = ['title' => mb_substr($t, 0, 20), 'url' => mb_substr($u, 0, 300)];
+                if (count($nl) >= 12) break;
+            }
+            set_setting('nav_links', json_encode($nl, JSON_UNESCAPED_UNICODE));
         }
         // 密钥类：留空表示不修改
         if (!empty($_POST['smtp_pass'])) set_setting('smtp_pass', secret_encrypt(trim((string)$_POST['smtp_pass'])));
@@ -1656,6 +1699,30 @@ elseif ($path === '/admin/settings') {
         echo '<p class="muted small" style="margin:6px 0 0">填 6 位十六进制色值，如 <code>#2f6b45</code>。按钮、边框、高亮会跟着变。</p>';
         echo '<div style="margin-top:20px"><button type="submit" class="btn ghost" name="act" value="reset_appearance" data-confirm="恢复默认主题色、玻璃透明度和两张背景图？已上传的图片会被删除。">恢复默认外观</button></div>';
         echo '</div></details>';
+
+        $navLinks = nav_links();
+        echo '<details class="fold"><summary>导航菜单</summary><div class="foldbody">';
+        echo '<p class="muted small" style="margin:0 0 14px">首页左上角三条杠里的自定义入口。链接支持 <code>https://</code> 开头的外部地址，或 <code>/</code> 开头的站内路径；最多 12 条。</p>';
+        echo '<div id="navrows">';
+        if (!$navLinks) $navLinks = [['title' => '', 'url' => '']];
+        foreach ($navLinks as $l) {
+            echo '<div class="navrow"><input type="text" class="navt" name="nav_title[]" value="' . e($l['title']) . '" placeholder="标题，如 使用教程" maxlength="20">'
+               . '<input type="text" class="navu" name="nav_url[]" value="' . e($l['url']) . '" placeholder="https://example.com 或 /query" maxlength="300">'
+               . '<button type="button" class="btn ghost sm navdel" aria-label="删除"><span>×</span></button></div>';
+        }
+        echo '</div>';
+        echo '<button type="button" class="btn ghost sm" id="navadd" style="margin-top:4px">+ 添加一项</button>';
+        echo '</div></details>';
+        echo '<script>(function(){var box=document.getElementById("navrows"),add=document.getElementById("navadd");'
+           . 'if(!box||!add)return;'
+           . 'function lock(){add.disabled=box.children.length>=12;add.style.opacity=add.disabled?".45":"1";}'
+           . 'function row(){var d=document.createElement("div");d.className="navrow";'
+           . 'd.innerHTML="<input type=\\"text\\" class=\\"navt\\" name=\\"nav_title[]\\" placeholder=\\"标题，如 使用教程\\" maxlength=\\"20\\"><input type=\\"text\\" class=\\"navu\\" name=\\"nav_url[]\\" placeholder=\\"https://example.com 或 /query\\" maxlength=\\"300\\"><button type=\\"button\\" class=\\"btn ghost sm navdel\\" aria-label=\\"删除\\"><span>×</span></button>";'
+           . 'return d;}'
+           . 'add.addEventListener("click",function(){if(box.children.length>=12)return;box.appendChild(row());lock();});'
+           . 'box.addEventListener("click",function(e){var b=e.target.closest(".navdel");if(!b)return;var r=b.closest(".navrow");'
+           . 'if(box.children.length>1){r.remove();}else{r.querySelectorAll("input").forEach(function(i){i.value="";});}lock();});'
+           . 'lock();})();</script>';
 
         echo '<details class="fold"' . (setting('pay_channels') === '' ? ' open' : '') . '><summary>支付设置</summary><div class="foldbody">';
         echo '<label class="row"><input type="checkbox" name="test_mode" value="1" ' . (test_mode() ? 'checked' : '') . '> 测试模式（无需真实支付，管理员可模拟开通）</label>';

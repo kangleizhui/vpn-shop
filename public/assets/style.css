@@ -79,7 +79,8 @@ main.wrap{padding-top:26px;padding-bottom:56px;min-height:calc(100vh - 200px)}
   -webkit-backdrop-filter:saturate(160%) blur(16px);
   border-bottom:1px solid var(--line);
 }
-.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:66px}
+.nav .wrap{display:flex;align-items:center;gap:10px;height:66px}
+.nav .wrap>nav{margin-left:auto}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:#fff;letter-spacing:.2px}
 .logo{
   width:34px;height:34px;border-radius:11px;display:grid;place-items:center;
@@ -491,6 +492,17 @@ details.cred .credbody,details.method .methodbody{padding:2px 0 14px}
 .drawer a{display:block;padding:11px 12px;border-radius:9px;color:var(--text);text-decoration:none;font-size:14px}
 .drawer a:hover,.drawer a.on{background:var(--accent-12);color:var(--text)}
 .drawerhr{height:1px;background:rgba(255,255,255,.08);margin:10px 12px}
+/* 设置页：导航菜单编辑行 */
+.navrow{display:grid;grid-template-columns:150px 1fr 44px;gap:8px;align-items:center;margin-bottom:8px}
+.navrow input{width:100%;box-sizing:border-box}
+.navrow .navdel{height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:17px;line-height:1}
+@media(max-width:700px){
+  .navrow{grid-template-columns:1fr 44px}
+  .navrow .navt{grid-column:1;grid-row:1}
+  .navrow .navu{grid-column:1;grid-row:2}
+  .navrow .navdel{grid-column:2;grid-row:1/span 2;height:100%;min-height:44px}
+}
+
 /* 长链接不再撑破提示框 / 卡片 */
 .alert{overflow-wrap:anywhere;word-break:break-word}
 .alert .mono,.alert a{word-break:break-all}
