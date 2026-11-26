@@ -87,10 +87,21 @@ function upd_check(bool $force = false): array
         }
     }
 
-    $ver = trim((string)upd_http(
-        'https://raw.githubusercontent.com/' . UPDATE_REPO . '/' . UPDATE_BRANCH . '/VERSION',
-        10
-    ));
+    // 版本号走 API（raw CDN 会缓存，刚推的改动可能读不到）
+    $ver = '';
+    $cj = upd_http('https://api.github.com/repos/' . UPDATE_REPO . '/contents/VERSION?ref=' . UPDATE_BRANCH, 10);
+    if ($cj !== null) {
+        $c = json_decode($cj, true);
+        if (is_array($c) && !empty($c['content'])) {
+            $ver = trim((string)base64_decode(str_replace(["\n", "\r"], '', (string)$c['content'])));
+        }
+    }
+    if ($ver === '') {
+        $ver = trim((string)upd_http(
+            'https://raw.githubusercontent.com/' . UPDATE_REPO . '/' . UPDATE_BRANCH . '/VERSION',
+            10
+        ));
+    }
 
     if ($sha === '' && $ver === '') {
         return ['ok' => false, 'msg' => '连接 GitHub 失败，请稍后重试', 'checked_at' => time()];
