@@ -206,7 +206,14 @@ function upd_apply(): array
     }
 
     try {
-        $body = upd_http('https://codeload.github.com/' . UPDATE_REPO . '/zip/refs/heads/' . UPDATE_BRANCH, 90);
+        // 先拿到确切提交，再按提交下载，避免分支 zip 的 CDN 缓存与记录的版本不一致
+        $info = upd_check(true);
+        if (empty($info['ok'])) {
+            return ['ok' => false, 'msg' => '无法获取 GitHub 最新版本', 'files' => 0, 'backup' => '', 'version' => ''];
+        }
+        $ref  = (string)($info['sha'] ?? '');
+        if ($ref === '') $ref = UPDATE_BRANCH;
+        $body = upd_http('https://codeload.github.com/' . UPDATE_REPO . '/zip/' . rawurlencode($ref), 90);
         if ($body === null || strlen($body) < 1000) {
             return ['ok' => false, 'msg' => '下载更新包失败，请检查服务器网络', 'files' => 0, 'backup' => '', 'version' => ''];
         }
@@ -238,7 +245,6 @@ function upd_apply(): array
 
         $n = upd_copy($srcRoot, APP_ROOT);
 
-        $info = upd_check(true);
         $ver = (string)($info['version'] ?? '');
         $sha = (string)($info['sha'] ?? '');
         @file_put_contents(DATA_DIR . '/installed.json', json_encode([
